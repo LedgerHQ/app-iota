@@ -1,8 +1,14 @@
-#include "blue_misc.h"
-#include "blue_types.h"
-#include "ui_common.h"
+#include "ui/blue/blue_misc.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 #include "api.h"
 #include "iota/addresses.h"
+#include "iota/bundle.h"
+#include "macros.h"
+#include "os.h"
+#include "ui/blue/blue_types.h"
+#include "ui/ui_common.h"
 
 // address stored is continuous chunk,
 // break it up to display on separate lines
@@ -20,9 +26,9 @@ void break_address()
 
 static uint8_t last_non_meta_tx_idx()
 {
-    uint8_t tx_idx = api.bundle_ctx.last_tx_index;
+    uint8_t tx_idx = api.ctx.bundle.bundle.last_tx_index;
     // there will always be 2+ non-metas (required output + input)
-    while (api.bundle_ctx.values[tx_idx] == 0) {
+    while (api.ctx.bundle.bundle.values[tx_idx] == 0) {
         tx_idx--;
     }
 
@@ -35,7 +41,7 @@ bool second_last_tx()
     // increment menu_idx and check if it == change tx
     blue_ui_state.menu_idx++;
 
-    bool retval = (menu_to_tx_idx() == last_non_meta_tx_idx());
+    bool retval = (ui_state_get_tx_index() == last_non_meta_tx_idx());
     // set menu_idx back
     blue_ui_state.menu_idx--;
 
@@ -44,7 +50,7 @@ bool second_last_tx()
 
 void update_tx_type()
 {
-    blue_ui_state.val = api.bundle_ctx.values[menu_to_tx_idx()];
+    blue_ui_state.val = api.ctx.bundle.bundle.values[ui_state_get_tx_index()];
 
     // first tx is output
     if (blue_ui_state.menu_idx == 0) {
@@ -55,30 +61,32 @@ void update_tx_type()
         if (blue_ui_state.val < 0) {
             os_memcpy(blue_ui_state.tx_type, "Input: \0", TX_TYPE_SPLIT);
             snprintf(&blue_ui_state.tx_type[TX_TYPE_SPLIT],
-                     TX_TYPE_TEXT_LEN - TX_TYPE_SPLIT, "Idx: %u",
-                     (unsigned int)api.bundle_ctx.indices[menu_to_tx_idx()]);
+                     TEXT_LEN_TX_TYPE - TX_TYPE_SPLIT, "Idx: %u",
+                     (unsigned int)api.ctx.bundle.bundle
+                         .indices[ui_state_get_tx_index()]);
         }
         else {
             os_memcpy(blue_ui_state.tx_type, "Change:\0", TX_TYPE_SPLIT);
             snprintf(&blue_ui_state.tx_type[TX_TYPE_SPLIT],
-                     TX_TYPE_TEXT_LEN - TX_TYPE_SPLIT, "Idx: %u",
-                     (unsigned int)api.bundle_ctx.indices[menu_to_tx_idx()]);
+                     TEXT_LEN_TX_TYPE - TX_TYPE_SPLIT, "Idx: %u",
+                     (unsigned int)api.ctx.bundle.bundle
+                         .indices[ui_state_get_tx_index()]);
         }
     }
 }
 
 static void update_tx_val()
 {
-    write_readable_val(blue_ui_state.val, blue_ui_state.abbrv_val,
-                       ABBRV_VAL_TEXT_LEN);
-    write_full_val(blue_ui_state.val, blue_ui_state.full_val,
-                   FULL_VAL_TEXT_LEN);
+    format_value_short(blue_ui_state.abbrv_val, TEXT_LEN_VALUE_ABBREV,
+                       ABS(blue_ui_state.val));
+    format_value_full(blue_ui_state.full_val, TEXT_LEN_VALUE_FULL,
+                      ABS(blue_ui_state.val));
 }
 
 static void update_tx_addr()
 {
     const unsigned char *addr_bytes =
-        bundle_get_address_bytes(&api.bundle_ctx, menu_to_tx_idx());
+        bundle_get_address_bytes(&api.ctx.bundle, ui_state_get_tx_index());
 
     get_address_with_checksum(addr_bytes, blue_ui_state.addr);
     // break up the address for use on separate lines
@@ -101,10 +109,10 @@ void write_bip_path()
     for (unsigned int i = 0; i < api.bip32_path_length; i++) {
 
         snprintf(blue_ui_state.bip32_path + chars_written,
-                 BIP_TEXT_LEN - chars_written, "%x",
+                 TEXT_LEN_BIP_PATH - chars_written, "%x",
                  api.bip32_path[i] & 0x7fffffff);
 
-        chars_written = strnlen(blue_ui_state.bip32_path, BIP_TEXT_LEN);
+        chars_written = strnlen(blue_ui_state.bip32_path, TEXT_LEN_BIP_PATH);
 
         // write apostroph if hardnend
         if (api.bip32_path[i] & (1u << 31)) {

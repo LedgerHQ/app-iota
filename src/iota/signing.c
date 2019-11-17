@@ -1,12 +1,31 @@
-#include "signing.h"
-#include "common.h"
-#include "conversion.h"
-#include "kerl.h"
+#include "iota/signing.h"
+#include "iota/bundle.h"
+#include "iota/conversion.h"
+#include "iota/iota_types.h"
+#include "iota/kerl.h"
+#include "macros.h"
+#include "os.h"
+
+void signing_initialize(SIGNING_CTX *ctx, const BUNDLE_INFO *bundle_info,
+                        const tryte_t *normalized_hash)
+{
+    // source and destination can potentially overlap
+    os_memmove(&ctx->bundle, bundle_info, sizeof(BUNDLE_INFO));
+    os_memcpy(ctx->hash, normalized_hash, NUM_HASH_TRYTES);
+}
+
+/// Returns the total number of signature fragments.
+static uint8_t num_fragments(const uint8_t security)
+{
+    // the maximum number of chunks is SEC_LVL*27
+    return CEILING(security * NUM_HASH_FRAGMENT_TRYTES,
+                   SIGNATURE_FRAGMENT_SIZE);
+}
 
 static void initialize_state(const unsigned char *seed_bytes,
                              uint32_t address_idx, unsigned char *state)
 {
-    os_memcpy(state, seed_bytes, 48);
+    os_memcpy(state, seed_bytes, NUM_HASH_BYTES);
     bytes_add_u32_mem(state, address_idx);
 
     cx_sha3_t sha;
@@ -15,17 +34,23 @@ static void initialize_state(const unsigned char *seed_bytes,
     kerl_squeeze_final_chunk(&sha, state);
 }
 
-void signing_initialize(SIGNING_CTX *ctx, uint8_t tx_index,
-                        const unsigned char *seed_bytes, uint32_t address_idx,
-                        uint8_t security, const tryte_t *normalized_hash)
+void signing_start(SIGNING_CTX *ctx, uint8_t tx_index,
+                   const unsigned char *seed_bytes, uint8_t security)
 {
-    os_memset(ctx, 0, sizeof(SIGNING_CTX));
+    if (tx_index > ctx->bundle.last_tx_index) {
+        THROW_PARAMETER("tx_idx");
+    }
+    if (!IN_RANGE(security, MIN_SECURITY_LEVEL, MAX_SECURITY_LEVEL)) {
+        THROW_PARAMETER("security");
+    }
 
-    initialize_state(seed_bytes, address_idx, ctx->state);
-    ctx->last_fragment = NUM_SIGNATURE_FRAGMENTS(security) - 1;
+    ctx->fragment_index = 0;
+    ctx->last_fragment = num_fragments(security) - 1;
     ctx->tx_index = tx_index;
 
-    os_memcpy(ctx->hash, normalized_hash, 81);
+    const uint32_t address_idx = ctx->bundle.indices[tx_index];
+
+    initialize_state(seed_bytes, address_idx, ctx->state);
 }
 
 static void generate_signature_fragment(unsigned char *state,
@@ -41,7 +66,7 @@ static void generate_signature_fragment(unsigned char *state,
         // the output of the squeeze is exactly the private key
         kerl_state_squeeze_chunk(&sha, state, signature_f);
 
-        for (unsigned int k = MAX_TRYTE_VALUE - hash_fragment[j]; k-- > 0;) {
+        for (unsigned int k = TRYTE_MAX - hash_fragment[j]; k-- > 0;) {
             kerl_initialize(&sha);
             kerl_absorb_chunk(&sha, signature_f);
             kerl_squeeze_final_chunk(&sha, signature_f);

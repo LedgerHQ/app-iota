@@ -78,7 +78,7 @@
 #define SCREEN_GLYPH_IOTA                                                      \
     {                                                                          \
         {                                                                      \
-            BAGL_ICON, EL_IOTA, 0,        12,       128, 40, 0,                \
+            BAGL_ICON, EL_IOTA, 0,        0,        128, 40, 0,                \
             0,         0,       0xFFFFFF, 0x000000, 0,   0},                   \
             (const char *)&C_x_iota_logo, 0, 0, 0, NULL, NULL, NULL            \
     }
@@ -134,15 +134,5 @@
     SCREEN_GLYPH_IOTA, SCREEN_GLYPH_LOAD, SCREEN_GLYPH_DASH,                   \
         SCREEN_GLYPH_BACK, SCREEN_GLYPH_INFO, SCREEN_GLYPH_CHECK,              \
         SCREEN_GLYPH_CROSS, SCREEN_GLYPH_UP, SCREEN_GLYPH_DOWN
-
-// -- Define button functions with specific names
-#define BUTTON_FUNCTION(name)                                                  \
-    static unsigned int bagl_ui_##name##_screen_button(                        \
-        unsigned int button_mask, unsigned int button_mask_counter)            \
-    {                                                                          \
-        nano_transition_state(button_mask);                                    \
-                                                                               \
-        return 0;                                                              \
-    }
 
 #endif // X_ELEMENTS_H

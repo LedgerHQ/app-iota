@@ -1,13 +1,14 @@
-#include "addresses.h"
-#include "common.h"
-#include "conversion.h"
-#include "kerl.h"
-#include <string.h>
+#include "iota/addresses.h"
+#include "iota/conversion.h"
+#include "iota/iota_types.h"
+#include "iota/kerl.h"
+#include "macros.h"
+#include "os.h"
 
 static void digest_single_chunk(unsigned char *key_fragment,
                                 cx_sha3_t *digest_sha3, cx_sha3_t *round_sha3)
 {
-    for (int k = 0; k < 26; k++) {
+    for (int k = 0; k < UTRYTE_MAX; k++) {
         kerl_initialize(round_sha3);
         kerl_absorb_chunk(round_sha3, key_fragment);
         kerl_squeeze_final_chunk(round_sha3, key_fragment);
@@ -42,11 +43,12 @@ void get_public_addr(const unsigned char *seed_bytes, uint32_t idx,
                      unsigned int security, unsigned char *address_bytes)
 {
     if (!IN_RANGE(security, MIN_SECURITY_LEVEL, MAX_SECURITY_LEVEL)) {
-        THROW(INVALID_PARAMETER);
+        THROW_PARAMETER("security");
     }
 
     // sha size is 424 bytes
-    cx_sha3_t key_sha, digest_sha;
+    cx_sha3_t key_sha;
+    cx_sha3_t digest_sha;
 
     // buffer for the digests of each security level
     unsigned char digest[NUM_HASH_BYTES * security];
@@ -57,8 +59,8 @@ void get_public_addr(const unsigned char *seed_bytes, uint32_t idx,
     // init private key sha, digest sha
     init_shas(seed_bytes, idx, &key_sha, &digest_sha, buffer);
 
-    for (uint8_t i = 0; i < security; i++) {
-        for (uint8_t j = 0; j < 27; j++) {
+    for (unsigned int i = 0; i < security; i++) {
+        for (unsigned int j = 0; j < NUM_HASH_FRAGMENT_TRYTES; j++) {
             // use address output array as a temp Kerl state storage
             unsigned char *state = address_bytes;
 

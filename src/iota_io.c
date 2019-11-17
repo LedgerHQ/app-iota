@@ -1,6 +1,8 @@
 #include "iota_io.h"
-#include "common.h"
 #include "api.h"
+#include "macros.h"
+#include "os.h"
+#include "os_io_seproxyhal.h"
 
 extern unsigned char G_io_apdu_buffer[IO_APDU_BUFFER_SIZE];
 
@@ -8,12 +10,13 @@ void io_initialize()
 {
     os_memset(G_io_apdu_buffer, 0, IO_APDU_BUFFER_SIZE);
     api_initialize();
+    io_timeout_reset();
 }
 
 void io_send(const void *ptr, unsigned int length, unsigned short sw)
 {
     if (length + 2 > IO_APDU_BUFFER_SIZE) {
-        THROW(INVALID_PARAMETER);
+        THROW_PARAMETER("length");
     }
 
     os_memcpy(G_io_apdu_buffer, ptr, length);
@@ -25,14 +28,14 @@ void io_send(const void *ptr, unsigned int length, unsigned short sw)
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, length);
 }
 
-unsigned int iota_dispatch()
+unsigned int iota_dispatch(const uint8_t ins, const uint8_t p1,
+                           const uint8_t p2, const uint8_t len,
+                           const unsigned char *input_data)
 {
-    const uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-    const unsigned int len = G_io_apdu_buffer[OFFSET_P3];
-    const unsigned char *input_data = G_io_apdu_buffer + OFFSET_CDATA;
+    UNUSED(p2);
 
     // check second byte for instruction
-    switch (G_io_apdu_buffer[OFFSET_INS]) {
+    switch (ins) {
     case INS_NONE:
         return 0;
     case INS_PUBKEY:
@@ -48,6 +51,30 @@ unsigned int iota_dispatch()
     // unknown command ??
     default:
         THROW(SW_INS_NOT_SUPPORTED);
-        return 0;
     }
+}
+
+void io_timeout_reset()
+{
+    UX_CALLBACK_SET_INTERVAL(0);
+}
+
+void io_timeout_set(const unsigned int ms)
+{
+    if (ms == 0) {
+        THROW_PARAMETER("ms");
+    }
+    UX_CALLBACK_SET_INTERVAL(ms);
+}
+
+void io_timeout_callback(const bool ux_allowed)
+{
+#ifdef TARGET_NANOS
+    UNUSED(ux_allowed);
+#else
+    if (!ux_allowed) {
+        THROW(EXCEPTION_IO_RESET);
+    }
+#endif
+    THROW(SW_COMMAND_TIMEOUT);
 }
